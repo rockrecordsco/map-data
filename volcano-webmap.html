@@ -547,7 +547,7 @@ L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
 // ---------- Dataset registry ----------
 // Each dataset: { key, label, color, points: [], layerGroup, minYear, maxYear }
 const DATASETS = {
-  eruptions: { key: 'eruptions', label: 'Volcanic eruptions', color: getVar('--eruption-red'), points: [], layerGroup: L.layerGroup().addTo(map), loaded: false },
+  eruptions: { key: 'eruptions', label: 'Volcanic eruptions', color: getVar('--eruption-red'), points: [], layerGroup: L.layerGroup(), loaded: false },
   earthquakes: { key: 'earthquakes', label: 'Earthquakes', color: getVar('--quake'), points: [], layerGroup: L.layerGroup(), loaded: false },
   so2: { key: 'so2', label: 'SO\u2082 emissions', color: getVar('--so2'), points: [], layerGroup: L.layerGroup(), loaded: false },
 };
@@ -646,6 +646,12 @@ function finalizeDatasetLoad(key, points) {
   row.classList.remove('disabled');
   toggle.disabled = false;
   toggle.checked = true;
+  // Setting .checked programmatically does NOT fire a 'change' event (only
+  // real user interaction does) — the checkbox's own change handler is
+  // what normally adds the layer group to the map, so without this line
+  // auto-loaded layers would show a checked checkbox that doesn't actually
+  // do anything until the user manually toggles it off and back on.
+  ds.layerGroup.addTo(map);
 
   if (key === 'earthquakes') {
     document.getElementById('eq-mag-control').style.display = 'block';
