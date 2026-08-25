@@ -1,0 +1,870 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Global Volcanism Monitor</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+
+<style>
+  :root {
+    --bg: #0a0d12;
+    --panel: rgba(16, 20, 26, 0.86);
+    --panel-border: rgba(255, 255, 255, 0.09);
+    --text-primary: #e8e6e1;
+    --text-secondary: #8b93a1;
+    --text-tertiary: #5a6270;
+    --ember: #ff6b35;
+    --amber: #ffb238;
+    --cool: #4fb3d9;
+    --quake: #4f9fd9;
+    --so2: #c9e15d;
+    --unknown: #4a5261;
+    --radius: 10px;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    background: var(--bg);
+    color: var(--text-primary);
+    font-family: 'Space Grotesk', -apple-system, sans-serif;
+    overflow: hidden;
+  }
+
+  .mono { font-family: 'IBM Plex Mono', 'Courier New', monospace; }
+
+  #map {
+    position: absolute;
+    inset: 0;
+    background: var(--bg);
+  }
+
+  /* Leaflet dark tweaks */
+  .leaflet-container { background: var(--bg); font-family: 'Space Grotesk', sans-serif; }
+  .leaflet-control-attribution {
+    background: rgba(10, 13, 18, 0.7) !important;
+    color: var(--text-tertiary) !important;
+    font-size: 10px !important;
+  }
+  .leaflet-control-attribution a { color: var(--text-secondary) !important; }
+  .leaflet-control-zoom a {
+    background: var(--panel) !important;
+    color: var(--text-primary) !important;
+    border: 1px solid var(--panel-border) !important;
+  }
+  .leaflet-control-zoom a:hover { background: rgba(255,255,255,0.08) !important; }
+
+  /* Glass panel base */
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--panel-border);
+    border-radius: var(--radius);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+  }
+
+  /* ---- Top-left: title + upload ---- */
+  #panel-title {
+    position: absolute;
+    top: 16px;
+    left: 16px;
+    width: 300px;
+    padding: 18px 20px;
+    z-index: 1000;
+  }
+  #panel-title h1 {
+    margin: 0;
+    font-size: 17px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+  }
+  #panel-title .eyebrow {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--ember);
+    margin-bottom: 6px;
+    display: block;
+  }
+  #panel-title p {
+    margin: 8px 0 14px;
+    font-size: 12px;
+    color: var(--text-secondary);
+    line-height: 1.5;
+  }
+
+  #brand-logo {
+    display: block;
+    height: 34px;
+    width: 34px;
+    object-fit: contain;
+    margin-bottom: 10px;
+  }
+
+  .dataset-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 0;
+    border-top: 1px solid var(--panel-border);
+    font-size: 11.5px;
+  }
+  .dataset-row:first-of-type { border-top: none; margin-top: 10px; }
+  .dataset-label { display: flex; align-items: center; gap: 8px; }
+  .dataset-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .dataset-count { color: var(--text-tertiary); font-family: 'IBM Plex Mono', monospace; font-size: 10px; }
+  .small-btn {
+    background: rgba(255,255,255,0.05);
+    border: 1px solid var(--panel-border);
+    color: var(--text-secondary);
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 10.5px;
+    padding: 4px 9px;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  .small-btn:hover { background: rgba(255,255,255,0.1); color: var(--text-primary); }
+  .small-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+
+  /* ---- Top-right: layers + legend ---- */
+  #panel-layers {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    width: 210px;
+    padding: 16px 18px;
+    z-index: 1000;
+  }
+  #panel-layers h2 {
+    margin: 0 0 10px;
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+    font-weight: 600;
+  }
+  .toggle-row {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 6px 0;
+    font-size: 12.5px;
+    cursor: pointer;
+    user-select: none;
+  }
+  .toggle-row input { accent-color: var(--ember); width: 14px; height: 14px; cursor: pointer; }
+  .toggle-row.disabled { color: var(--text-tertiary); cursor: default; }
+  .toggle-row.disabled input { cursor: default; }
+  .swatch { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+
+  .legend-block { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--panel-border); }
+  .legend-title { font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-tertiary); margin-bottom: 8px; }
+  .legend-scale { display: flex; align-items: flex-end; gap: 10px; margin-bottom: 10px; }
+  .legend-scale .item { display: flex; flex-direction: column; align-items: center; gap: 5px; }
+  .legend-scale .circle { border-radius: 50%; background: var(--amber); border: 1px solid rgba(255,255,255,0.25); }
+  .legend-scale .lbl { font-family: 'IBM Plex Mono', monospace; font-size: 9px; color: var(--text-tertiary); }
+  .legend-gradient {
+    height: 6px;
+    border-radius: 3px;
+    background: linear-gradient(90deg, var(--cool), var(--amber), var(--ember));
+    margin-bottom: 4px;
+  }
+  .legend-gradient-labels { display: flex; justify-content: space-between; font-family: 'IBM Plex Mono', monospace; font-size: 9px; color: var(--text-tertiary); }
+
+  /* ---- Bottom: seismograph timeline ---- */
+  #panel-timeline {
+    position: absolute;
+    left: 16px;
+    right: 16px;
+    bottom: 16px;
+    padding: 14px 20px 16px;
+    z-index: 1000;
+  }
+
+  /* ---- Fine print / data source attribution ---- */
+  #attribution-bar {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 900;
+    text-align: center;
+    padding: 3px 12px;
+    pointer-events: none;
+  }
+  #attribution-bar span {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 9.5px;
+    color: var(--text-tertiary);
+    letter-spacing: 0.01em;
+    pointer-events: auto;
+  }
+  #attribution-bar a { color: var(--text-tertiary); text-decoration: underline; }
+  #attribution-bar a:hover { color: var(--text-secondary); }
+  #timeline-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin-bottom: 6px;
+  }
+  #timeline-header .eyebrow {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-tertiary);
+  }
+  #year-readout {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 22px;
+    font-weight: 600;
+    color: var(--ember);
+    letter-spacing: 0.02em;
+  }
+  #timeline-controls { display: flex; align-items: center; gap: 12px; }
+  #play-btn {
+    width: 34px; height: 34px;
+    border-radius: 50%;
+    border: 1px solid var(--panel-border);
+    background: rgba(255,255,255,0.05);
+    color: var(--text-primary);
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+    transition: all 0.15s ease;
+  }
+  #play-btn:hover { background: var(--ember); border-color: var(--ember); color: #0a0d12; }
+  #play-btn svg { width: 13px; height: 13px; }
+
+  #scrubber-wrap {
+    position: relative;
+    flex: 1;
+    height: 46px;
+  }
+  #density-canvas {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    pointer-events: none;
+  }
+  #year-slider {
+    position: absolute;
+    bottom: 6px;
+    left: 0;
+    width: 100%;
+    margin: 0;
+    -webkit-appearance: none;
+    appearance: none;
+    background: transparent;
+    cursor: pointer;
+    height: 20px;
+  }
+  #year-slider::-webkit-slider-runnable-track {
+    height: 2px;
+    background: rgba(255,255,255,0.18);
+    border-radius: 1px;
+  }
+  #year-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 3px;
+    height: 22px;
+    margin-top: -10px;
+    background: var(--ember);
+    box-shadow: 0 0 10px 1px rgba(255,107,53,0.8);
+    border-radius: 1px;
+    cursor: grab;
+  }
+  #year-slider::-moz-range-track { height: 2px; background: rgba(255,255,255,0.18); border-radius: 1px; }
+  #year-slider::-moz-range-thumb {
+    width: 3px; height: 22px; border: none;
+    background: var(--ember);
+    box-shadow: 0 0 10px 1px rgba(255,107,53,0.8);
+    border-radius: 1px; cursor: grab;
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    #year-slider::-webkit-slider-thumb { animation: pulse-glow 2.4s ease-in-out infinite; }
+  }
+  @keyframes pulse-glow {
+    0%, 100% { box-shadow: 0 0 10px 1px rgba(255,107,53,0.8); }
+    50% { box-shadow: 0 0 16px 3px rgba(255,107,53,0.55); }
+  }
+
+  #range-labels { display: flex; justify-content: space-between; margin-top: 4px; }
+  #range-labels span { font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: var(--text-tertiary); }
+
+  #timeline-right { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+  .mode-toggle {
+    display: flex;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid var(--panel-border);
+    border-radius: 6px;
+    overflow: hidden;
+  }
+  .mode-toggle button {
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 10.5px;
+    padding: 6px 10px;
+    cursor: pointer;
+  }
+  .mode-toggle button.active { background: var(--ember); color: #0a0d12; font-weight: 600; }
+
+  /* ---- Empty state ---- */
+  #empty-state {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 999;
+    text-align: center;
+    pointer-events: none;
+  }
+  #empty-state .icon { font-size: 30px; margin-bottom: 10px; opacity: 0.6; }
+  #empty-state h3 { margin: 0 0 6px; font-size: 15px; font-weight: 600; color: var(--text-secondary); }
+  #empty-state p { margin: 0; font-size: 12px; color: var(--text-tertiary); }
+
+  /* ---- Popup ---- */
+  .leaflet-popup-content-wrapper {
+    background: var(--panel) !important;
+    color: var(--text-primary) !important;
+    border: 1px solid var(--panel-border);
+    border-radius: 10px !important;
+    backdrop-filter: blur(14px);
+  }
+  .leaflet-popup-tip { background: var(--panel) !important; }
+  .leaflet-popup-close-button { color: var(--text-secondary) !important; }
+  .popup-name { font-size: 14.5px; font-weight: 700; margin-bottom: 2px; }
+  .popup-country { font-size: 11px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 10px; }
+  .popup-row { display: flex; justify-content: space-between; font-size: 11.5px; padding: 4px 0; border-top: 1px solid var(--panel-border); }
+  .popup-row:first-of-type { border-top: none; }
+  .popup-row .k { color: var(--text-tertiary); }
+  .popup-row .v { font-family: 'IBM Plex Mono', monospace; color: var(--text-primary); }
+  .vei-badge {
+    display: inline-block;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10.5px;
+    font-weight: 600;
+    padding: 1px 7px;
+    border-radius: 4px;
+    color: #0a0d12;
+  }
+
+  @media (max-width: 760px) {
+    #panel-title, #panel-layers { width: calc(50% - 24px); padding: 12px 14px; }
+    #panel-layers { display: none; }
+    #panel-timeline { left: 8px; right: 8px; bottom: 8px; padding: 10px 14px 12px; }
+    #timeline-right { display: none; }
+    #attribution-bar span { font-size: 8px; }
+  }
+</style>
+</head>
+<body>
+
+<div id="map"></div>
+
+<div id="empty-state">
+  <div class="icon">◈</div>
+  <h3>No data loaded</h3>
+  <p>Loading bundled data…</p>
+</div>
+
+<!-- Title / Upload panel -->
+<div id="panel-title" class="panel">
+  <img id="brand-logo" src="logo.png" alt="" onerror="this.style.display='none';" />
+  <span class="eyebrow">Smithsonian GVP · 1960–2025</span>
+  <h1>Global Volcanism Monitor</h1>
+  <p>Holocene eruption records plotted by location, explosivity, and time.</p>
+
+  <div id="dataset-list"></div>
+</div>
+
+<!-- Layers / legend panel -->
+<div id="panel-layers" class="panel">
+  <h2>Layers</h2>
+  <label class="toggle-row" id="row-eruptions">
+    <input type="checkbox" id="toggle-eruptions" checked />
+    <span class="swatch" style="background: var(--ember);"></span>
+    Volcanic eruptions
+  </label>
+  <label class="toggle-row disabled" id="row-earthquakes">
+    <input type="checkbox" id="toggle-earthquakes" disabled />
+    <span class="swatch" style="background: var(--quake);"></span>
+    Earthquakes
+  </label>
+  <div id="eq-mag-control" style="display:none; margin: 2px 0 10px 17px;">
+    <div style="display:flex; justify-content:space-between; font-size:10px; color:var(--text-tertiary); margin-bottom:4px;">
+      <span>Min magnitude</span>
+      <span id="eq-mag-readout" class="mono">4.5</span>
+    </div>
+    <input type="range" id="eq-mag-slider" min="0" max="9" step="0.1" value="4.5"
+           style="width:100%; accent-color: var(--quake); cursor:pointer;" />
+    <div id="eq-mag-count" class="mono" style="font-size:9px; color:var(--text-tertiary); margin-top:4px;"></div>
+  </div>
+  <label class="toggle-row disabled" id="row-so2">
+    <input type="checkbox" id="toggle-so2" disabled />
+    <span class="swatch" style="background: var(--so2);"></span>
+    SO&#8322; emissions
+  </label>
+
+  <div class="legend-block">
+    <div class="legend-title">Point size — VEI / Magnitude</div>
+    <div class="legend-scale">
+      <div class="item"><div class="circle" style="width:6px; height:6px;"></div><div class="lbl">0–1</div></div>
+      <div class="item"><div class="circle" style="width:12px; height:12px;"></div><div class="lbl">3</div></div>
+      <div class="item"><div class="circle" style="width:20px; height:20px;"></div><div class="lbl">5</div></div>
+      <div class="item"><div class="circle" style="width:30px; height:30px;"></div><div class="lbl">7+</div></div>
+    </div>
+    <div class="legend-title" style="margin-top:12px;">Color — eruption explosivity</div>
+    <div class="legend-gradient"></div>
+    <div class="legend-gradient-labels"><span>Effusive</span><span>Explosive</span></div>
+    <div class="legend-title" style="margin-top:12px;">Color — earthquake depth</div>
+    <div class="legend-gradient" style="background: linear-gradient(90deg, rgb(173,216,240), rgb(8,40,74));"></div>
+    <div class="legend-gradient-labels"><span>Shallow</span><span>700 km+</span></div>
+    <div style="font-size:9.5px; color:var(--text-tertiary); margin-top:10px; line-height:1.4;">
+      SO&#8322; points are sized on their own log scale (kilotons), since mass ranges from &lt;1 kt to 15,000+ kt.
+    </div>
+  </div>
+</div>
+
+<!-- Timeline -->
+<div id="panel-timeline" class="panel">
+  <div id="timeline-header">
+    <span class="eyebrow">Timeline</span>
+    <span id="year-readout" class="mono">—</span>
+  </div>
+  <div id="timeline-controls">
+    <button id="play-btn" title="Play / pause">
+      <svg id="play-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+      <svg id="pause-icon" viewBox="0 0 24 24" fill="currentColor" style="display:none;"><path d="M6 5h4v14H6zM14 5h4v14h-4z"/></svg>
+    </button>
+    <div id="scrubber-wrap">
+      <canvas id="density-canvas"></canvas>
+      <input type="range" id="year-slider" min="1960" max="2025" value="2025" step="1" />
+      <div id="range-labels"><span id="range-min">1960</span><span id="range-max">2025</span></div>
+    </div>
+    <div id="timeline-right">
+      <div class="mode-toggle">
+        <button id="mode-cumulative" class="active">Cumulative</button>
+        <button id="mode-window">Year only</button>
+      </div>
+      <button class="small-btn" id="reset-range">Full range</button>
+    </div>
+  </div>
+</div>
+
+<!-- Data source fine print -->
+<div id="attribution-bar">
+  <span>
+    Volcano data: Global Volcanism Program, 2026. <a href="https://doi.org/10.5479/si.GVP.VOTW5-2026.5.4" target="_blank" rel="noopener">Volcanoes of the World (v. 5.4.0; 7 Aug 2026)</a>, Smithsonian Institution, compiled by Venzke, E.
+    &middot; Earthquake data: International Seismological Centre (2026), <a href="https://doi.org/10.31905/D808B830" target="_blank" rel="noopener">On-line Bulletin</a>.
+    &middot; SO&#8322; emissions: <a href="https://so2.gsfc.nasa.gov/measures.html" target="_blank" rel="noopener">NASA Goddard Space Flight Center, Multi-decadal Sulfur Dioxide Climatology from Satellite Instruments</a>.
+    &middot; Map &copy; OpenStreetMap contributors, CARTO.
+  </span>
+</div>
+
+<script>
+/* ============================================================
+   GLOBAL VOLCANISM MONITOR
+   Extensible multi-layer time-sliced webmap.
+   Datasets: eruptions (active), earthquakes (stub), so2 (stub)
+   ============================================================ */
+
+// ---------- Map setup ----------
+const map = L.map('map', {
+  center: [10, 40],
+  zoom: 3,
+  minZoom: 2,
+  maxZoom: 12,
+  worldCopyJump: true,
+  zoomControl: false,
+});
+L.control.zoom({ position: 'bottomright' }).addTo(map);
+
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+  subdomains: 'abcd',
+  maxZoom: 19,
+}).addTo(map);
+
+// ---------- Dataset registry ----------
+// Each dataset: { key, label, color, points: [], layerGroup, minYear, maxYear }
+const DATASETS = {
+  eruptions: { key: 'eruptions', label: 'Volcanic eruptions', color: getVar('--ember'), points: [], layerGroup: L.layerGroup().addTo(map), loaded: false },
+  earthquakes: { key: 'earthquakes', label: 'Earthquakes', color: getVar('--quake'), points: [], layerGroup: L.layerGroup(), loaded: false },
+  so2: { key: 'so2', label: 'SO\u2082 emissions', color: getVar('--so2'), points: [], layerGroup: L.layerGroup(), loaded: false },
+};
+
+function getVar(name) {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
+
+// ---------- Color scale for VEI / size ----------
+function colorForSize(v) {
+  if (v === null || v === undefined || isNaN(v)) return getVar('--unknown');
+  const cool = [79, 179, 217];   // --cool
+  const amber = [255, 178, 56];  // --amber
+  const ember = [255, 107, 53];  // --ember
+  const t = Math.max(0, Math.min(1, v / 7));
+  let c1, c2, f;
+  if (t < 0.5) { c1 = cool; c2 = amber; f = t / 0.5; }
+  else { c1 = amber; c2 = ember; f = (t - 0.5) / 0.5; }
+  const r = Math.round(c1[0] + (c2[0]-c1[0])*f);
+  const g = Math.round(c1[1] + (c2[1]-c1[1])*f);
+  const b = Math.round(c1[2] + (c2[2]-c1[2])*f);
+  return `rgb(${r},${g},${b})`;
+}
+
+function radiusForSize(v) {
+  if (v === null || v === undefined || isNaN(v)) return 4;
+  return 4 + Math.pow(Math.max(v, 0), 1.15) * 2.6;
+}
+
+// SO2 mass spans <1 kt to 15,000+ kt (Pinatubo 1991) — a linear or power
+// scale like radiusForSize would make small emissions invisible and huge
+// ones cover the whole map, so this uses a log scale instead.
+function radiusForSO2(kt) {
+  if (kt === null || kt === undefined || isNaN(kt)) return 4;
+  const v = Math.max(kt, 0);
+  return 4 + Math.log10(v + 1) * 6.5;
+}
+
+// Earthquake color by depth: light blue (shallow) -> dark navy (deep).
+// Depths are heavily skewed toward shallow (most quakes are <100km, a few
+// deep-focus subduction events reach ~700km), so this uses a sqrt scale
+// to keep the shallow range visually distinguishable rather than having
+// almost everything collapse to the same light shade under a linear map.
+const DEPTH_MAX_KM = 700;
+function depthColor(depth) {
+  if (depth === null || depth === undefined || isNaN(depth)) return getVar('--unknown');
+  const t = Math.max(0, Math.min(1, Math.sqrt(Math.max(depth, 0)) / Math.sqrt(DEPTH_MAX_KM)));
+  const light = [173, 216, 240]; // shallow
+  const dark = [8, 40, 74];      // deep
+  const r = Math.round(light[0] + (dark[0] - light[0]) * t);
+  const g = Math.round(light[1] + (dark[1] - light[1]) * t);
+  const b = Math.round(light[2] + (dark[2] - light[2]) * t);
+  return `rgb(${r},${g},${b})`;
+}
+
+// Loads a dataset from the compact bundled JSON format: an array of
+// [lat, lon, size, year] arrays (no names/countries — kept out to save
+// file size, especially for the ~200k-row earthquake catalog). Earthquake
+// rows carry a 5th element, depth in km, used for depth-based coloring.
+function loadDatasetFromArray(key, arr) {
+  const genericName = key === 'eruptions' ? 'Eruption'
+                     : key === 'earthquakes' ? 'Earthquake'
+                     : 'SO\u2082 emission';
+  const points = arr
+    .filter(row => Array.isArray(row) && row.length >= 4)
+    .map(row => {
+      const [lat, lon, size, year, depth] = row;
+      return {
+        name: genericName, country: '', lat, lon, size, year,
+        dateRaw: String(year), type: '',
+        depth: depth !== undefined ? depth : null,
+      };
+    });
+  if (!points.length) return;
+  finalizeDatasetLoad(key, points);
+}
+
+// Shared tail for both the manual column-mapped upload flow and the
+// compact-array auto-load flow.
+function finalizeDatasetLoad(key, points) {
+  const ds = DATASETS[key];
+  ds.points = points;
+  ds.loaded = true;
+  // NOTE: deliberately not Math.min(...points.map(...)) — with ~200k
+  // earthquake points, spreading that many arguments into Math.min/max
+  // exceeds the JS engine's call-stack argument limit and throws.
+  let minY = Infinity, maxY = -Infinity;
+  for (const p of points) {
+    if (p.year < minY) minY = p.year;
+    if (p.year > maxY) maxY = p.year;
+  }
+  ds.minYear = minY;
+  ds.maxYear = maxY;
+
+  // enable its layer toggle
+  const row = document.getElementById('row-' + key);
+  const toggle = document.getElementById('toggle-' + key);
+  row.classList.remove('disabled');
+  toggle.disabled = false;
+  toggle.checked = true;
+
+  if (key === 'earthquakes') {
+    document.getElementById('eq-mag-control').style.display = 'block';
+  }
+
+  updateDatasetList();
+  recomputeGlobalRange();
+  renderDensity();
+  renderPoints();
+  document.getElementById('empty-state').style.display = anyLoaded() ? 'none' : 'block';
+}
+
+// Tries to auto-load eruptions.json / earthquakes.json / so2.json from
+// alongside this HTML file. Silently does nothing for any file that's
+// missing or fails to fetch (e.g. opened via file:// where browsers block
+// fetch of local files — see note below) so the manual upload flow still
+// works as a fallback either way.
+//
+// NOTE: fetching local JSON files only works when this HTML is served
+// over http(s) — e.g. `python3 -m http.server` in this folder, or hosted
+// on a real webserver. Double-clicking the file to open it directly
+// (file:// URL) will have this silently fail in Chrome due to CORS
+// restrictions on local files; the map still works, it just needs data
+// dropped in manually in that case.
+async function autoLoadBundledData() {
+  const files = [
+    { key: 'eruptions', url: 'eruptions.json' },
+    { key: 'earthquakes', url: 'earthquakes.json' },
+    { key: 'so2', url: 'so2.json' },
+  ];
+  for (const f of files) {
+    try {
+      const res = await fetch(f.url, { cache: 'no-cache' });
+      if (!res.ok) continue;
+      const arr = await res.json();
+      loadDatasetFromArray(f.key, arr);
+    } catch (e) {
+      console.warn(`Bundled file "${f.url}" not auto-loaded (${e.message}). ` +
+                   `If you're opening this file directly (file://), serve it over ` +
+                   `http instead, or drop the file in manually via the upload panel.`);
+    }
+  }
+}
+
+function anyLoaded() {
+  return Object.values(DATASETS).some(d => d.loaded);
+}
+
+function updateDatasetList() {
+  const el = document.getElementById('dataset-list');
+  el.innerHTML = '';
+  Object.values(DATASETS).forEach(ds => {
+    if (!ds.loaded) return;
+    const row = document.createElement('div');
+    row.className = 'dataset-row';
+    row.innerHTML = `
+      <div class="dataset-label">
+        <span class="dataset-dot" style="background:${ds.color};"></span>
+        ${ds.label}
+      </div>
+      <span class="dataset-count mono">${ds.points.length.toLocaleString()}</span>
+    `;
+    el.appendChild(row);
+  });
+}
+
+// ---------- Layer visibility toggles ----------
+['eruptions', 'earthquakes', 'so2'].forEach(key => {
+  document.getElementById('toggle-' + key).addEventListener('change', (e) => {
+    if (e.target.checked) DATASETS[key].layerGroup.addTo(map);
+    else map.removeLayer(DATASETS[key].layerGroup);
+  });
+});
+
+// ---------- Time range & slider ----------
+let globalMin = 1960, globalMax = 2025;
+let currentYear = 2025;
+let mode = 'cumulative'; // or 'window'
+
+function recomputeGlobalRange() {
+  const loaded = Object.values(DATASETS).filter(d => d.loaded);
+  if (!loaded.length) return;
+  globalMin = Math.min(...loaded.map(d => d.minYear));
+  globalMax = Math.max(...loaded.map(d => d.maxYear));
+  const slider = document.getElementById('year-slider');
+  slider.min = globalMin;
+  slider.max = globalMax;
+  if (currentYear < globalMin || currentYear > globalMax) currentYear = globalMax;
+  slider.value = currentYear;
+  document.getElementById('range-min').textContent = globalMin;
+  document.getElementById('range-max').textContent = globalMax;
+  document.getElementById('year-readout').textContent = currentYear;
+}
+
+document.getElementById('reset-range').addEventListener('click', () => {
+  currentYear = globalMax;
+  document.getElementById('year-slider').value = currentYear;
+  document.getElementById('year-readout').textContent = currentYear;
+  renderPoints();
+});
+
+const slider = document.getElementById('year-slider');
+slider.addEventListener('input', () => {
+  currentYear = parseInt(slider.value, 10);
+  document.getElementById('year-readout').textContent = currentYear;
+  scheduleRender();
+});
+
+document.getElementById('mode-cumulative').addEventListener('click', () => setMode('cumulative'));
+document.getElementById('mode-window').addEventListener('click', () => setMode('window'));
+function setMode(m) {
+  mode = m;
+  document.getElementById('mode-cumulative').classList.toggle('active', m === 'cumulative');
+  document.getElementById('mode-window').classList.toggle('active', m === 'window');
+  renderPoints();
+}
+
+// ---------- Play / pause animation ----------
+let playing = false;
+let playTimer = null;
+document.getElementById('play-btn').addEventListener('click', () => {
+  playing = !playing;
+  document.getElementById('play-icon').style.display = playing ? 'none' : 'block';
+  document.getElementById('pause-icon').style.display = playing ? 'block' : 'none';
+  if (playing) {
+    playTimer = setInterval(() => {
+      let next = currentYear + 1;
+      if (next > globalMax) next = globalMin;
+      currentYear = next;
+      slider.value = currentYear;
+      document.getElementById('year-readout').textContent = currentYear;
+      renderPoints();
+    }, 350);
+  } else {
+    clearInterval(playTimer);
+  }
+});
+
+// ---------- Rendering points ----------
+let eqMinMag = 4.5;
+
+function renderPoints() {
+  Object.values(DATASETS).forEach(ds => {
+    if (!ds.loaded) return;
+    ds.layerGroup.clearLayers();
+    const visible = ds.points.filter(p => {
+      const timeOk = mode === 'cumulative' ? p.year <= currentYear : p.year === currentYear;
+      if (!timeOk) return false;
+      if (ds.key === 'earthquakes' && p.size !== null && p.size < eqMinMag) return false;
+      return true;
+    });
+    visible.forEach(p => {
+      const r = ds.key === 'so2' ? radiusForSO2(p.size) : radiusForSize(p.size);
+      const color = ds.key === 'eruptions' ? colorForSize(p.size)
+                  : ds.key === 'earthquakes' ? depthColor(p.depth)
+                  : ds.color;
+      const marker = L.circleMarker([p.lat, p.lon], {
+        radius: r,
+        fillColor: color,
+        fillOpacity: 0.55,
+        color: color,
+        weight: 1.1,
+        opacity: 0.9,
+        renderer: canvasRenderer,
+      });
+      // Popup HTML is built lazily on click rather than upfront for every
+      // marker — with up to ~190k earthquake points visible at once (low
+      // magnitude threshold), eagerly building that many popup strings
+      // that are almost never opened would waste real time on every render.
+      marker.on('click', () => marker.bindPopup(buildPopup(p, ds)).openPopup());
+      marker.addTo(ds.layerGroup);
+    });
+    if (ds.key === 'earthquakes') {
+      document.getElementById('eq-mag-count').textContent =
+        `Showing ${visible.length.toLocaleString()} of ${ds.points.length.toLocaleString()}`;
+    }
+  });
+}
+
+// Slider dragging (year or magnitude) can fire many 'input' events per
+// second — with ~200k earthquake points loaded, calling renderPoints() on
+// every single tick would stutter. This coalesces bursts down to at most
+// one render per animation frame.
+let renderScheduled = false;
+function scheduleRender() {
+  if (renderScheduled) return;
+  renderScheduled = true;
+  requestAnimationFrame(() => { renderPoints(); renderScheduled = false; });
+}
+
+const canvasRenderer = L.canvas({ padding: 0.5 });
+
+const eqMagSlider = document.getElementById('eq-mag-slider');
+eqMagSlider.addEventListener('input', () => {
+  eqMinMag = parseFloat(eqMagSlider.value);
+  document.getElementById('eq-mag-readout').textContent = eqMinMag.toFixed(1);
+  scheduleRender();
+});
+
+function buildPopup(p, ds) {
+  const veiColor = ds.key === 'eruptions' ? colorForSize(p.size)
+                 : ds.key === 'earthquakes' ? depthColor(p.depth)
+                 : ds.color;
+  const sizeLabel = ds.key === 'eruptions' ? 'VEI' : ds.key === 'earthquakes' ? 'Magnitude' : 'SO\u2082 (kt)';
+  return `
+    <div class="popup-name">${escapeHtml(p.name || 'Unnamed')}</div>
+    ${p.country ? `<div class="popup-country">${escapeHtml(p.country)}</div>` : ''}
+    <div class="popup-row"><span class="k">Start date</span><span class="v">${escapeHtml(String(p.dateRaw ?? ''))}</span></div>
+    <div class="popup-row"><span class="k">${sizeLabel}</span><span class="v"><span class="vei-badge" style="background:${veiColor};">${p.size !== null && p.size !== undefined ? p.size : '—'}</span></span></div>
+    ${ds.key === 'earthquakes' && p.depth !== null && p.depth !== undefined ? `<div class="popup-row"><span class="k">Depth</span><span class="v">${p.depth.toFixed(1)} km</span></div>` : ''}
+    ${p.type ? `<div class="popup-row"><span class="k">Type</span><span class="v">${escapeHtml(p.type)}</span></div>` : ''}
+    <div class="popup-row"><span class="k">Coordinates</span><span class="v">${p.lat.toFixed(2)}, ${p.lon.toFixed(2)}</span></div>
+  `;
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+// ---------- Density sparkline (signature element) ----------
+function renderDensity() {
+  const canvas = document.getElementById('density-canvas');
+  const wrap = document.getElementById('scrubber-wrap');
+  const dpr = window.devicePixelRatio || 1;
+  const w = wrap.clientWidth, h = wrap.clientHeight;
+  canvas.width = w * dpr; canvas.height = h * dpr;
+  canvas.style.width = w + 'px'; canvas.style.height = h + 'px';
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, w, h);
+
+  const loaded = Object.values(DATASETS).filter(d => d.loaded);
+  if (!loaded.length) return;
+
+  const counts = {};
+  loaded.forEach(ds => {
+    ds.points.forEach(p => { counts[p.year] = (counts[p.year] || 0) + 1; });
+  });
+  const years = Object.keys(counts).map(Number);
+  if (!years.length) return;
+  const maxCount = Math.max(...Object.values(counts));
+  const barBase = h - 12;
+  const barMaxHeight = h - 20;
+
+  const span = (globalMax - globalMin) || 1;
+  ctx.fillStyle = 'rgba(255, 107, 53, 0.28)';
+  for (let y = globalMin; y <= globalMax; y++) {
+    const c = counts[y] || 0;
+    if (!c) continue;
+    const x = ((y - globalMin) / span) * w;
+    const barW = Math.max(w / span - 0.6, 0.8);
+    const barH = (c / maxCount) * barMaxHeight;
+    ctx.fillRect(x, barBase - barH, barW, barH);
+  }
+}
+window.addEventListener('resize', renderDensity);
+
+// ---------- Init ----------
+updateDatasetList();
+autoLoadBundledData();
+</script>
+</body>
+</html>
