@@ -81,6 +81,8 @@
     top: 16px;
     left: 16px;
     width: 300px;
+    max-height: calc(100vh - 32px);
+    overflow-y: auto;
     padding: 18px 20px;
     z-index: 1000;
   }
@@ -105,6 +107,33 @@
     color: var(--text-secondary);
     line-height: 1.5;
   }
+
+  .sources-block {
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px solid var(--panel-border);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .source-name {
+    display: block;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+    margin-bottom: 2px;
+  }
+  .source-cite {
+    display: block;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 9px;
+    color: var(--text-tertiary);
+    line-height: 1.45;
+  }
+  .source-cite a { color: var(--text-tertiary); text-decoration: underline; }
+  .source-cite a:hover { color: var(--text-secondary); }
 
   #brand-logo {
     display: block;
@@ -195,29 +224,6 @@
     z-index: 1000;
   }
 
-  /* ---- Fine print / data source attribution ---- */
-  /* Pinned to the very top edge (not the bottom) — the timeline panel
-     anchors to the bottom and can vary in height across browsers/embeds,
-     so a bottom-pinned attribution strip risked being hidden underneath it. */
-  #attribution-bar {
-    position: absolute;
-    left: 0;
-    right: 0;
-    top: 0;
-    z-index: 900;
-    text-align: center;
-    padding: 3px 12px;
-    pointer-events: none;
-  }
-  #attribution-bar span {
-    font-family: 'IBM Plex Mono', monospace;
-    font-size: 9.5px;
-    color: var(--text-tertiary);
-    letter-spacing: 0.01em;
-    pointer-events: auto;
-  }
-  #attribution-bar a { color: var(--text-tertiary); text-decoration: underline; }
-  #attribution-bar a:hover { color: var(--text-secondary); }
   #timeline-header {
     display: flex;
     align-items: baseline;
@@ -373,7 +379,6 @@
     #panel-layers { display: none; }
     #panel-timeline { left: 8px; right: 8px; bottom: 8px; padding: 10px 14px 12px; }
     #timeline-right { display: none; }
-    #attribution-bar span { font-size: 8px; }
   }
 </style>
 </head>
@@ -387,14 +392,28 @@
   <p>Loading bundled data…</p>
 </div>
 
-<!-- Title / Upload panel -->
+<!-- Title panel -->
 <div id="panel-title" class="panel">
   <img id="brand-logo" src="logo.png" alt="" onerror="this.style.display='none';" />
-  <span class="eyebrow">Smithsonian GVP · 1960–2025</span>
   <h1>Global Volcanism Monitor</h1>
   <p>Holocene eruption records plotted by location, explosivity, and time.</p>
 
   <div id="dataset-list"></div>
+
+  <div class="sources-block">
+    <div>
+      <span class="source-name">Volcanic eruptions</span>
+      <span class="source-cite">Global Volcanism Program, 2026. <a href="https://doi.org/10.5479/si.GVP.VOTW5-2026.5.4" target="_blank" rel="noopener">Volcanoes of the World (v. 5.4.0)</a>, Smithsonian Institution, compiled by Venzke, E.</span>
+    </div>
+    <div>
+      <span class="source-name">Earthquakes</span>
+      <span class="source-cite">International Seismological Centre (2026), <a href="https://doi.org/10.31905/D808B830" target="_blank" rel="noopener">On-line Bulletin</a>.</span>
+    </div>
+    <div>
+      <span class="source-name">SO&#8322; emissions</span>
+      <span class="source-cite">NASA Goddard Space Flight Center, <a href="https://so2.gsfc.nasa.gov/measures.html" target="_blank" rel="noopener">Multi-decadal Sulfur Dioxide Climatology from Satellite Instruments</a>.</span>
+    </div>
+  </div>
 </div>
 
 <!-- Layers / legend panel -->
@@ -426,20 +445,18 @@
   </label>
 
   <div class="legend-block">
-    <div class="legend-title">Point size — VEI / Magnitude</div>
+    <div class="legend-title">Point size — eruption VEI</div>
     <div class="legend-scale">
       <div class="item"><div class="circle" style="width:5px; height:5px; background:var(--eruption-red);"></div><div class="lbl">0–1</div></div>
       <div class="item"><div class="circle" style="width:9px; height:9px; background:var(--eruption-red);"></div><div class="lbl">3</div></div>
       <div class="item"><div class="circle" style="width:13px; height:13px; background:var(--eruption-red);"></div><div class="lbl">5</div></div>
       <div class="item"><div class="circle" style="width:17px; height:17px; background:var(--eruption-red);"></div><div class="lbl">7+</div></div>
     </div>
-    <div style="font-size:9.5px; color:var(--text-tertiary); margin: 6px 0 0; line-height:1.4;">
-      Eruptions are shown as red circles sized by VEI.
-    </div>
     <div class="legend-title" style="margin-top:12px;">Color — earthquake depth</div>
     <div class="legend-gradient" style="background: linear-gradient(90deg, rgb(173,216,240), rgb(8,40,74));"></div>
     <div class="legend-gradient-labels"><span>Shallow</span><span>700 km+</span></div>
     <div style="font-size:9.5px; color:var(--text-tertiary); margin-top:10px; line-height:1.4;">
+      Earthquakes use their own smaller size scale by magnitude (max ~10px across), separate from the VEI scale above, since so many can be on screen at once.
       SO&#8322; points are sized on their own log scale (kilotons), since mass ranges from &lt;1 kt to 15,000+ kt.
     </div>
   </div>
@@ -458,7 +475,7 @@
     </button>
     <div id="scrubber-wrap">
       <canvas id="density-canvas"></canvas>
-      <input type="range" id="year-slider" min="1960" max="2025" value="2025" step="1" />
+      <input type="range" id="year-slider" min="1960" max="2030" value="2025" step="1" />
       <div id="range-labels"><span id="range-min">1960</span><span id="range-max">2025</span></div>
     </div>
     <div id="timeline-right">
@@ -471,15 +488,9 @@
   </div>
 </div>
 
-<!-- Data source fine print -->
-<div id="attribution-bar">
-  <span>
-    Volcano data: Global Volcanism Program, 2026. <a href="https://doi.org/10.5479/si.GVP.VOTW5-2026.5.4" target="_blank" rel="noopener">Volcanoes of the World (v. 5.4.0; 7 Aug 2026)</a>, Smithsonian Institution, compiled by Venzke, E.
-    &middot; Earthquake data: International Seismological Centre (2026), <a href="https://doi.org/10.31905/D808B830" target="_blank" rel="noopener">On-line Bulletin</a>.
-    &middot; SO&#8322; emissions: <a href="https://so2.gsfc.nasa.gov/measures.html" target="_blank" rel="noopener">NASA Goddard Space Flight Center, Multi-decadal Sulfur Dioxide Climatology from Satellite Instruments</a>.
-    &middot; Map &copy; OpenStreetMap contributors, CARTO.
-  </span>
-</div>
+<!-- Note: Leaflet's own attribution control (bottom-right) already
+     credits OpenStreetMap/CARTO for the basemap tiles; data-source
+     citations for the three datasets live in the title panel instead. -->
 
 <script>
 /* ============================================================
@@ -524,6 +535,16 @@ function getVar(name) {
 function radiusForSize(v) {
   if (v === null || v === undefined || isNaN(v)) return 2;
   return 2 + Math.max(v, 0) * 0.9;
+}
+
+// Earthquake radius, capped at 5px (10px diameter) even at the highest
+// recorded magnitudes (~9.2) — kept deliberately smaller than eruptions
+// since a single quake catalog year can have thousands of points on
+// screen at once.
+function radiusForEarthquake(mag) {
+  if (mag === null || mag === undefined || isNaN(mag)) return 1;
+  const v = Math.max(mag, 0);
+  return Math.min(1 + v * 0.435, 5);
 }
 
 // SO2 mass spans <1 kt to 15,000+ kt (Pinatubo 1991) — a linear or power
@@ -676,11 +697,20 @@ let globalMin = 1960, globalMax = 2025;
 let currentYear = 2025;
 let mode = 'cumulative'; // or 'window'
 
+// Time slider is capped to this range regardless of the underlying data's
+// actual span (eruption records go back further, e.g. ongoing eruptions
+// that started before 1960) — data outside this window still counts in
+// "Cumulative" mode at the nearest edge, it just isn't a scrubbable point.
+const SLIDER_MIN_YEAR = 1960;
+const SLIDER_MAX_YEAR = 2030;
+
 function recomputeGlobalRange() {
   const loaded = Object.values(DATASETS).filter(d => d.loaded);
   if (!loaded.length) return;
-  globalMin = Math.min(...loaded.map(d => d.minYear));
-  globalMax = Math.max(...loaded.map(d => d.maxYear));
+  const dataMin = Math.min(...loaded.map(d => d.minYear));
+  const dataMax = Math.max(...loaded.map(d => d.maxYear));
+  globalMin = Math.max(dataMin, SLIDER_MIN_YEAR);
+  globalMax = Math.min(dataMax, SLIDER_MAX_YEAR);
   const slider = document.getElementById('year-slider');
   slider.min = globalMin;
   slider.max = globalMax;
@@ -749,7 +779,9 @@ function renderPoints() {
       return true;
     });
     visible.forEach(p => {
-      const r = ds.key === 'so2' ? radiusForSO2(p.size) : radiusForSize(p.size);
+      const r = ds.key === 'so2' ? radiusForSO2(p.size)
+              : ds.key === 'earthquakes' ? radiusForEarthquake(p.size)
+              : radiusForSize(p.size);
       const color = ds.key === 'earthquakes' ? depthColor(p.depth) : ds.color;
       const marker = L.circleMarker([p.lat, p.lon], {
         radius: r,
