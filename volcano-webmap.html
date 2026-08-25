@@ -20,6 +20,7 @@
     --text-secondary: #8b93a1;
     --text-tertiary: #5a6270;
     --ember: #ff6b35;
+    --eruption-red: #e8402c;
     --amber: #ffb238;
     --cool: #4fb3d9;
     --quake: #4f9fd9;
@@ -195,11 +196,14 @@
   }
 
   /* ---- Fine print / data source attribution ---- */
+  /* Pinned to the very top edge (not the bottom) — the timeline panel
+     anchors to the bottom and can vary in height across browsers/embeds,
+     so a bottom-pinned attribution strip risked being hidden underneath it. */
   #attribution-bar {
     position: absolute;
     left: 0;
     right: 0;
-    bottom: 0;
+    top: 0;
     z-index: 900;
     text-align: center;
     padding: 3px 12px;
@@ -424,14 +428,14 @@
   <div class="legend-block">
     <div class="legend-title">Point size — VEI / Magnitude</div>
     <div class="legend-scale">
-      <div class="item"><div class="circle" style="width:6px; height:6px;"></div><div class="lbl">0–1</div></div>
-      <div class="item"><div class="circle" style="width:12px; height:12px;"></div><div class="lbl">3</div></div>
-      <div class="item"><div class="circle" style="width:20px; height:20px;"></div><div class="lbl">5</div></div>
-      <div class="item"><div class="circle" style="width:30px; height:30px;"></div><div class="lbl">7+</div></div>
+      <div class="item"><div class="circle" style="width:5px; height:5px; background:var(--eruption-red);"></div><div class="lbl">0–1</div></div>
+      <div class="item"><div class="circle" style="width:9px; height:9px; background:var(--eruption-red);"></div><div class="lbl">3</div></div>
+      <div class="item"><div class="circle" style="width:13px; height:13px; background:var(--eruption-red);"></div><div class="lbl">5</div></div>
+      <div class="item"><div class="circle" style="width:17px; height:17px; background:var(--eruption-red);"></div><div class="lbl">7+</div></div>
     </div>
-    <div class="legend-title" style="margin-top:12px;">Color — eruption explosivity</div>
-    <div class="legend-gradient"></div>
-    <div class="legend-gradient-labels"><span>Effusive</span><span>Explosive</span></div>
+    <div style="font-size:9.5px; color:var(--text-tertiary); margin: 6px 0 0; line-height:1.4;">
+      Eruptions are shown as red circles sized by VEI.
+    </div>
     <div class="legend-title" style="margin-top:12px;">Color — earthquake depth</div>
     <div class="legend-gradient" style="background: linear-gradient(90deg, rgb(173,216,240), rgb(8,40,74));"></div>
     <div class="legend-gradient-labels"><span>Shallow</span><span>700 km+</span></div>
@@ -504,7 +508,7 @@ L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
 // ---------- Dataset registry ----------
 // Each dataset: { key, label, color, points: [], layerGroup, minYear, maxYear }
 const DATASETS = {
-  eruptions: { key: 'eruptions', label: 'Volcanic eruptions', color: getVar('--ember'), points: [], layerGroup: L.layerGroup().addTo(map), loaded: false },
+  eruptions: { key: 'eruptions', label: 'Volcanic eruptions', color: getVar('--eruption-red'), points: [], layerGroup: L.layerGroup().addTo(map), loaded: false },
   earthquakes: { key: 'earthquakes', label: 'Earthquakes', color: getVar('--quake'), points: [], layerGroup: L.layerGroup(), loaded: false },
   so2: { key: 'so2', label: 'SO\u2082 emissions', color: getVar('--so2'), points: [], layerGroup: L.layerGroup(), loaded: false },
 };
@@ -513,34 +517,22 @@ function getVar(name) {
   return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 }
 
-// ---------- Color scale for VEI / size ----------
-function colorForSize(v) {
-  if (v === null || v === undefined || isNaN(v)) return getVar('--unknown');
-  const cool = [79, 179, 217];   // --cool
-  const amber = [255, 178, 56];  // --amber
-  const ember = [255, 107, 53];  // --ember
-  const t = Math.max(0, Math.min(1, v / 7));
-  let c1, c2, f;
-  if (t < 0.5) { c1 = cool; c2 = amber; f = t / 0.5; }
-  else { c1 = amber; c2 = ember; f = (t - 0.5) / 0.5; }
-  const r = Math.round(c1[0] + (c2[0]-c1[0])*f);
-  const g = Math.round(c1[1] + (c2[1]-c1[1])*f);
-  const b = Math.round(c1[2] + (c2[2]-c1[2])*f);
-  return `rgb(${r},${g},${b})`;
-}
+// ---------- Color scale ----------
+// Eruptions render as flat red (varying only by size, per VEI) — no
+// explosivity color gradient.
 
 function radiusForSize(v) {
-  if (v === null || v === undefined || isNaN(v)) return 4;
-  return 4 + Math.pow(Math.max(v, 0), 1.15) * 2.6;
+  if (v === null || v === undefined || isNaN(v)) return 2;
+  return 2 + Math.max(v, 0) * 0.9;
 }
 
 // SO2 mass spans <1 kt to 15,000+ kt (Pinatubo 1991) — a linear or power
 // scale like radiusForSize would make small emissions invisible and huge
 // ones cover the whole map, so this uses a log scale instead.
 function radiusForSO2(kt) {
-  if (kt === null || kt === undefined || isNaN(kt)) return 4;
+  if (kt === null || kt === undefined || isNaN(kt)) return 1.5;
   const v = Math.max(kt, 0);
-  return 4 + Math.log10(v + 1) * 6.5;
+  return 1.5 + Math.log10(v + 1) * 3;
 }
 
 // Earthquake color by depth: light blue (shallow) -> dark navy (deep).
@@ -758,9 +750,7 @@ function renderPoints() {
     });
     visible.forEach(p => {
       const r = ds.key === 'so2' ? radiusForSO2(p.size) : radiusForSize(p.size);
-      const color = ds.key === 'eruptions' ? colorForSize(p.size)
-                  : ds.key === 'earthquakes' ? depthColor(p.depth)
-                  : ds.color;
+      const color = ds.key === 'earthquakes' ? depthColor(p.depth) : ds.color;
       const marker = L.circleMarker([p.lat, p.lon], {
         radius: r,
         fillColor: color,
@@ -805,9 +795,7 @@ eqMagSlider.addEventListener('input', () => {
 });
 
 function buildPopup(p, ds) {
-  const veiColor = ds.key === 'eruptions' ? colorForSize(p.size)
-                 : ds.key === 'earthquakes' ? depthColor(p.depth)
-                 : ds.color;
+  const veiColor = ds.key === 'earthquakes' ? depthColor(p.depth) : ds.color;
   const sizeLabel = ds.key === 'eruptions' ? 'VEI' : ds.key === 'earthquakes' ? 'Magnitude' : 'SO\u2082 (kt)';
   return `
     <div class="popup-name">${escapeHtml(p.name || 'Unnamed')}</div>
