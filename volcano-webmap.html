@@ -665,6 +665,7 @@ function anyLoaded() {
 }
 
 function updateDatasetList() {
+  return;
   const el = document.getElementById('dataset-list');
   el.innerHTML = '';
   Object.values(DATASETS).forEach(ds => {
