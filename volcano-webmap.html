@@ -24,7 +24,7 @@
     --amber: #ffb238;
     --cool: #4fb3d9;
     --quake: #4f9fd9;
-    --so2: #c9e15d;
+    --so2: #FFFF00;
     --unknown: #4a5261;
     --radius: 10px;
   }
@@ -543,7 +543,7 @@ L.control.zoom({ position: 'bottomright' }).addTo(map);
 // (no account needed, instant, 5M free tile requests/month) and paste it
 // below. Without a key, tiles still load but are watermarked
 // "API KEY REQUIRED" across the map.
-const CARTO_API_KEY = cb1_3jpq_1_86c0311cac004c98eae70227;
+const CARTO_API_KEY = 'PASTE_YOUR_CARTO_KEY_HERE';
 
 L.tileLayer(`https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png?key=${CARTO_API_KEY}`, {
   attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
@@ -730,7 +730,13 @@ function recomputeGlobalRange() {
   const loaded = Object.values(DATASETS).filter(d => d.loaded);
   if (!loaded.length) return;
   const dataMin = Math.min(...loaded.map(d => d.minYear));
-  const dataMax = Math.max(...loaded.map(d => d.maxYear));
+  // Deliberately Math.min, not Math.max: this picks the EARLIEST-ending
+  // dataset's final year, not the latest. Using the latest (e.g. SO2 data
+  // running to 2026) would let the slider scrub into years where other
+  // layers (e.g. earthquakes, which stop at 2024) have no data at all —
+  // capping at the earliest-ending dataset keeps every visible year
+  // showing all loaded layers consistently.
+  const dataMax = Math.min(...loaded.map(d => d.maxYear));
   globalMin = Math.max(dataMin, SLIDER_MIN_YEAR);
   globalMax = Math.min(dataMax, SLIDER_MAX_YEAR);
   const slider = document.getElementById('year-slider');
